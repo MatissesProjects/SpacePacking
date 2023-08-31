@@ -60,20 +60,30 @@ function addItem() {
   const height = parseFloat(document.getElementById('height').value);
   const depth = parseFloat(document.getElementById('depth').value);
 
+  // Generate a random color
+  const randomColor = new THREE.Color(Math.random(), Math.random(), Math.random());
+
+  // Sort emptySpaces by y, then x, then z
+  emptySpaces.sort((a, b) => a.y - b.y || a.x - b.x || a.z - b.z);
+
   // Try to find a suitable empty space for the item, including possible rotations
+  let bestFitIndex = -1;
   let bestFit = null;
-  for (const space of emptySpaces) {
+  for (let i = 0; i < emptySpaces.length; i++) {
+    const space = emptySpaces[i];
     if (space.width >= width && space.height >= height && space.depth >= depth) {
       bestFit = {
         space,
         rotated: false,
       };
+      bestFitIndex = i;
       break;
     } else if (space.width >= depth && space.height >= height && space.depth >= width) {
       bestFit = {
         space,
         rotated: true,
       };
+      bestFitIndex = i;
       break;
     }
   }
@@ -84,13 +94,12 @@ function addItem() {
   }
 
   const { space, rotated } = bestFit;
-
   const actualWidth = rotated ? depth : width;
   const actualDepth = rotated ? width : depth;
 
-  // Create a new item and place it into the found empty space
+  // Create a new item and place it in the space
   const itemGeometry = new THREE.BoxGeometry(actualWidth, height, actualDepth);
-  const itemMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const itemMaterial = new THREE.MeshBasicMaterial({ color: randomColor });
   const item = new THREE.Mesh(itemGeometry, itemMaterial);
   item.position.set(
     space.x + actualWidth / 2,
@@ -101,15 +110,40 @@ function addItem() {
   // Add item to the scene
   scene.add(item);
 
-  // Update empty spaces (here, we are simplifying by assuming one new empty space)
-  emptySpaces.push({
-    x: space.x + actualWidth,
-    y: space.y,
-    z: space.z,
-    width: space.width - actualWidth,
-    height: space.height,
-    depth: space.depth
-  });
+  // Remove the space that was filled
+  emptySpaces.splice(bestFitIndex, 1);
+
+  // Create new empty spaces around the newly placed item
+  if (space.x + actualWidth < binWidth) {
+    emptySpaces.push({
+      x: space.x + actualWidth,
+      y: space.y,
+      z: space.z,
+      width: binWidth - (space.x + actualWidth),
+      height: height,
+      depth: actualDepth
+    });
+  }
+  if (space.y + height < binHeight) {
+    emptySpaces.push({
+      x: space.x,
+      y: space.y + height,
+      z: space.z,
+      width: actualWidth,
+      height: binHeight - (space.y + height),
+      depth: actualDepth
+    });
+  }
+  if (space.z + actualDepth < binDepth) {
+    emptySpaces.push({
+      x: space.x,
+      y: space.y,
+      z: space.z + actualDepth,
+      width: actualWidth,
+      height: height,
+      depth: binDepth - (space.z + actualDepth)
+    });
+  }
 }
 
 
