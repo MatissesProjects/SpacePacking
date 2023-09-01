@@ -15,36 +15,37 @@ document.getElementById('3d-container').appendChild(renderer.domElement);
 // Initialize bin dimensions
 const binWidth = 10, binHeight = 10, binDepth = 10;
 
-// Create a mesh for the bin
-const binGeometry = new THREE.BoxGeometry(binWidth, binHeight, binDepth);
-const binMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
-const bin = new THREE.Mesh(binGeometry, binMaterial);
+// Create walls for the bin
+const binMaterial = new THREE.MeshBasicMaterial({ 
+  color: 0x00ff00, 
+  wireframe: false,
+  opacity: 0.5,
+  transparent: true,
+  side: THREE.DoubleSide });
+const walls = ['left', 'right', 'bottom', 'top', 'back'];
 
-// Add bin to the scene
-scene.add(bin);
+walls.forEach(wall => {
+  let geometry;
+  switch (wall) {
+    case 'left': geometry = new THREE.PlaneGeometry(binDepth, binHeight); break;
+    case 'right': geometry = new THREE.PlaneGeometry(binDepth, binHeight); break;
+    case 'bottom': geometry = new THREE.PlaneGeometry(binWidth, binDepth); break;
+    case 'top': geometry = new THREE.PlaneGeometry(binWidth, binDepth); break;
+    case 'back': geometry = new THREE.PlaneGeometry(binWidth, binHeight); break;
+  }
+  const mesh = new THREE.Mesh(geometry, binMaterial);
+  switch (wall) {
+    case 'left': mesh.position.set(0, binHeight / 2, binDepth / 2); mesh.rotation.y = Math.PI / 2; break;
+    case 'right': mesh.position.set(binWidth, binHeight / 2, binDepth / 2); mesh.rotation.y = -Math.PI / 2; break;
+    case 'bottom': mesh.position.set(binWidth / 2, 0, binDepth / 2); mesh.rotation.x = Math.PI / 2; break;
+    case 'top': mesh.position.set(binWidth / 2, binHeight, binDepth / 2); mesh.rotation.x = -Math.PI / 2; break;
+    case 'back': mesh.position.set(binWidth / 2, binHeight / 2, 0); break;
+  }
+  scene.add(mesh);
+});
 
 // Camera position
 camera.position.z = 20;
-
-// Last added item
-let lastAddedItem = null;
-
-// Render loop
-let angle = 0; // initialize angle
-
-function animate() {
-  requestAnimationFrame(animate);
-
-  // Animate the camera
-  angle += 0.01;
-  camera.position.x = 20 * Math.sin(angle);
-  camera.position.z = 20 * Math.cos(angle);
-  camera.lookAt(0, 0, 0); // Look at the center of the scene
-
-  renderer.render(scene, camera);
-}
-
-animate();
 
 // Initialize empty spaces in the bin
 let emptySpaces = [
@@ -53,6 +54,29 @@ let emptySpaces = [
     width: binWidth, height: binHeight, depth: binDepth
   }
 ];
+
+// Render loop
+let speed = 0.01; // Default speed value
+let angle = 0; // Initialize angle
+
+document.getElementById('speedSlider').addEventListener('input', function(e) {
+  const sliderValue = e.target.value;
+  speed = sliderValue / 5000; // Adjust the divisor for your own speed scaling
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Animate the camera
+  angle += speed; // Here we use the speed variable instead of a fixed value
+  camera.position.x = 20 * Math.sin(angle);
+  camera.position.z = 20 * Math.cos(angle);
+  camera.lookAt(0, 0, 0);
+
+  renderer.render(scene, camera);
+}
+
+animate();
 
 // Function to add an item
 function addItem() {
@@ -66,24 +90,14 @@ function addItem() {
   // Sort emptySpaces by y, then x, then z
   emptySpaces.sort((a, b) => a.y - b.y || a.x - b.x || a.z - b.z);
 
-  // Try to find a suitable empty space for the item, including possible rotations
+  // Try to find a suitable empty space for the item
   let bestFitIndex = -1;
   let bestFit = null;
   for (let i = 0; i < emptySpaces.length; i++) {
     const space = emptySpaces[i];
     if (space.width >= width && space.height >= height && space.depth >= depth) {
-      bestFit = {
-        space,
-        rotated: false,
-      };
       bestFitIndex = i;
-      break;
-    } else if (space.width >= depth && space.height >= height && space.depth >= width) {
-      bestFit = {
-        space,
-        rotated: true,
-      };
-      bestFitIndex = i;
+      bestFit = space;
       break;
     }
   }
@@ -93,59 +107,59 @@ function addItem() {
     return;
   }
 
-  const { space, rotated } = bestFit;
-  const actualWidth = rotated ? depth : width;
-  const actualDepth = rotated ? width : depth;
-
   // Create a new item and place it in the space
-  const itemGeometry = new THREE.BoxGeometry(actualWidth, height, actualDepth);
+  const epsilon = 0.01; // Small value to prevent Z-fighting
+  const actualWidth = width;
+  const actualDepth = depth;
+  const itemGeometry = new THREE.BoxGeometry(actualWidth - epsilon, height - epsilon, actualDepth - epsilon);
   const itemMaterial = new THREE.MeshBasicMaterial({ color: randomColor });
   const item = new THREE.Mesh(itemGeometry, itemMaterial);
   item.position.set(
-    space.x + actualWidth / 2,
-    space.y + height / 2,
-    space.z + actualDepth / 2
+    bestFit.x + actualWidth / 2,
+    bestFit.y + height / 2,
+    bestFit.z + actualDepth / 2
   );
 
   // Add item to the scene
   scene.add(item);
 
-  // Remove the space that was filled
+  // Update the empty spaces
   emptySpaces.splice(bestFitIndex, 1);
 
-  // Create new empty spaces around the newly placed item
-  if (space.x + actualWidth < binWidth) {
+  // Add new empty spaces
+  if (bestFit.x + width < binWidth) {
     emptySpaces.push({
-      x: space.x + actualWidth,
-      y: space.y,
-      z: space.z,
-      width: binWidth - (space.x + actualWidth),
+      x: bestFit.x + width,
+      y: bestFit.y,
+      z: bestFit.z,
+      width: binWidth - (bestFit.x + width),
       height: height,
-      depth: actualDepth
+      depth: depth
     });
   }
-  if (space.y + height < binHeight) {
+
+  if (bestFit.y + height < binHeight) {
     emptySpaces.push({
-      x: space.x,
-      y: space.y + height,
-      z: space.z,
-      width: actualWidth,
-      height: binHeight - (space.y + height),
-      depth: actualDepth
+      x: bestFit.x,
+      y: bestFit.y + height,
+      z: bestFit.z,
+      width: width,
+      height: binHeight - (bestFit.y + height),
+      depth: depth
     });
   }
-  if (space.z + actualDepth < binDepth) {
+
+  if (bestFit.z + depth < binDepth) {
     emptySpaces.push({
-      x: space.x,
-      y: space.y,
-      z: space.z + actualDepth,
-      width: actualWidth,
+      x: bestFit.x,
+      y: bestFit.y,
+      z: bestFit.z + depth,
+      width: width,
       height: height,
-      depth: binDepth - (space.z + actualDepth)
+      depth: binDepth - (bestFit.z + depth)
     });
   }
 }
-
 
 // Attach event listener
 document.addEventListener('DOMContentLoaded', (event) => {

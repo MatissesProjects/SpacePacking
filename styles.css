@@ -1,0 +1,12 @@
+/* Flexbox container for the dimension inputs */
+.dimensions {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  max-width: 500px;
+}
+/* Style for the speed slider and camera controls */
+.controls {
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
